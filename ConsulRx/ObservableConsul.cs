@@ -1,12 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Consul;
+using ConsulRx.ConfigParsers;
+using Microsoft.Extensions.Configuration;
 using Spiffy.Monitoring;
 
 namespace ConsulRx
@@ -122,9 +125,10 @@ namespace ConsulRx
         {
             var serviceTasks = dependencies.Services.Select(GetServiceAsync);
             var keyTasks = dependencies.Keys.Select(GetKeyAsync);
+            var configKeyTasks = dependencies.ConfigurationKeys.Select(GetKeyAsync);
             var keyRecursiveTasks = dependencies.KeyPrefixes.Select(GetKeyRecursiveAsync);
 
-            await Task.WhenAll(serviceTasks.Cast<Task>().Concat(keyTasks).Concat(keyRecursiveTasks));
+            await Task.WhenAll(serviceTasks.Cast<Task>().Concat(keyTasks).Concat(configKeyTasks).Concat(keyRecursiveTasks));
 
             var services = serviceTasks.Select(t => t.Result)
                 .Where(s => s != null)
@@ -133,6 +137,7 @@ namespace ConsulRx
             var keys = new KeyValueStore(keyTasks
                 .Select(t => t.Result)
                 .Where(k => k != null)
+                .Concat(configKeyTasks.Select(x => x.Result))
                 .Concat(keyRecursiveTasks.SelectMany(t => t.Result)));
 
             var missingKeyPrefixes = dependencies.KeyPrefixes
@@ -167,7 +172,7 @@ namespace ConsulRx
                     eventContext.Dispose();
                 }
             }
-            
+
             var consulStateObservable = Observable.Create<ConsulState>(o =>
             {
                 var compositeDisposable = new CompositeDisposable
@@ -212,6 +217,31 @@ namespace ConsulRx
                                     eventContext["UpdateType"] = "Noop";
                                 }
                             });
+                        }, o.OnError),
+                    this.ObserveKeys(dependencies.ConfigurationKeys)  // observe configuration keys
+                        .Select(kv => kv.ToKeyValueNode())
+                        .Subscribe(kvNode =>
+                        {
+                            WrapUpdate("UpdateConfigKey", eventContext =>
+                            {
+                                var kvNodes = kvNode.ParseConfig(new JsonConfigurationParser());
+
+                                eventContext["ConfigKey"] = kvNode.FullKey;
+                                eventContext["ChildConfigKeyCount"] = kvNodes.Count;
+
+                                bool alreadyExisted = consulState.ContainsKeyStartingWith(kvNode.FullKey);
+                                if (consulState.TryUpdateKVNodes(kvNodes, out var updatedState))
+                                {
+                                    eventContext["UpdateType"] = alreadyExisted ? "Update" : "Add";
+                                    consulState = updatedState;
+                                    o.OnNext(consulState);
+                                }
+                                else
+                                {
+                                    eventContext["UpdateType"] = "Noop";
+                                }
+                            });
+
                         }, o.OnError),
                     this.ObserveKeysRecursive(dependencies.KeyPrefixes)
                         .Subscribe(kv =>

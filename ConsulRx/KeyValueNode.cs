@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
+using ConsulRx.ConfigParsers;
 
 namespace ConsulRx
 {
@@ -7,13 +10,28 @@ namespace ConsulRx
     {
         public string FullKey { get; }
         public string Value { get; }
+        public byte[] RawValue { get; }
 
-        public KeyValueNode(string fullKey, byte[] value) : this(fullKey, value == null ? null : Encoding.UTF8.GetString(value)) { }
+        public KeyValueNode(string fullKey, byte[] value)
+        {
+            FullKey = fullKey;
+
+            if (value != null)
+            {
+                Value = Encoding.UTF8.GetString(value);
+                RawValue = value;
+            }
+        }
 
         public KeyValueNode(string fullKey, string value)
         {
             FullKey = fullKey;
-            Value = value;
+
+            if (value != null)
+            {
+                Value = value;
+                RawValue = Encoding.UTF8.GetBytes(value);
+            }
         }
 
         public string LeafKey

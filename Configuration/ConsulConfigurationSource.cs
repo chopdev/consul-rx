@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using ConsulRx.ConfigParsers;
 using Microsoft.Extensions.Configuration;
 
 namespace ConsulRx.Configuration
@@ -80,6 +81,14 @@ namespace ConsulRx.Configuration
         {
             _consulDependencies.Keys.Add(consulKey);
             _kvItemConfigMappings.Add(new KVItemConfigMapping(configKey, consulKey));
+
+            return this;
+        }
+
+        public ConsulConfigurationSource MapConfigurationKey(string consulConfigurationKey, string configKey, IConfigurationParser parser = null)
+        {
+            _consulDependencies.ConfigurationKeys.Add(consulConfigurationKey);
+            _kvItemConfigMappings.Add(new KVItemConfigMapping(configKey, consulConfigurationKey));
 
             return this;
         }

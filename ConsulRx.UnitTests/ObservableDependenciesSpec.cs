@@ -140,6 +140,52 @@ namespace ConsulRx.UnitTests
         }
 
         [Fact]
+        public async Task ConsulStateIsOnlyStreamedWhenConfigKeyResponseComesWithNewValue()
+        {
+            _consulDependencies.ConfigurationKeys.Add("mykey1");
+            StartObserving();
+
+            string json = @"{""key1"":""value1""}";
+
+            await CompleteGetAsync("mykey1", new QueryResult<KVPair>
+            {
+                StatusCode = HttpStatusCode.OK,
+                Response = new KVPair("mykey1")
+                {
+                    Value = Encoding.UTF8.GetBytes(json)
+                }
+            });
+            _consulStateObservations.Should().HaveCount(1);
+
+            await CompleteGetAsync("mykey1", new QueryResult<KVPair>
+            {
+                StatusCode = HttpStatusCode.OK,
+                Response = new KVPair("mykey1")
+                {
+                    Value = Encoding.UTF8.GetBytes(json)
+                }
+            });
+            _consulStateObservations.Should().HaveCount(1);
+
+            json = @"{""key1"":{
+        ""id"": {
+            ""description"": ""The unique identifier for a product"",
+            ""type"": ""integer""
+        }
+    },}";
+
+            await CompleteGetAsync("mykey1", new QueryResult<KVPair>
+            {
+                StatusCode = HttpStatusCode.OK,
+                Response = new KVPair("mykey1")
+                {
+                    Value = Encoding.UTF8.GetBytes(json)
+                }
+            });
+            _consulStateObservations.Should().HaveCount(2);
+        }
+
+        [Fact]
         public async Task ConsulStateIsOnlyStreamedWhenListResponseComesWithNewValue()
         {
             _consulDependencies.KeyPrefixes.Add("mykey1");

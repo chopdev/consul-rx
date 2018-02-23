@@ -46,6 +46,28 @@ namespace ConsulRx.Configuration.UnitTests
             VerifyConfigKey(configProvider, "consul:afeature", "myvalue");
         }
 
+        [Fact]
+        public void ConfigurationKeysBeRetrievedViaMappedConfigPrefix()
+        {
+            var source = new ConsulConfigurationSource()
+                .UseCache(new InMemoryEmergencyCache())
+                .MapConfigurationKey("apps/myapp/myconfig", "consulConf");
+
+            var json = @"{""key1"":""value1"",""key2"": {
+        ""key3"": {
+            ""key4"": ""val4"",
+            ""key5"": ""val5""
+        }
+    },}";
+
+            var consulState = new ConsulState();
+            consulState = consulState.UpdateKVNode(new KeyValueNode("apps/myapp/myconfig", json));
+
+            var configProvider = _consul.LoadConfigProvider(source, consulState);
+
+            VerifyConfigKey(configProvider, "consulConf", json);
+        }
+
         private void VerifyConfigKey(IConfigurationProvider configProvider, string key, string expectedValue)
         {
             configProvider.TryGet(key, out var actualValue).Should().BeTrue();
